@@ -25,11 +25,23 @@ import requests
 import json
 import pandas as pd
 import os
+import matplotlib.pyplot as plt
 
 pd.set_option('display.max_columns',20)#don't show ellipses
 #read rawg api key from input or get from file 
-APIKEY = input('api key: ')
+#APIKEY = input('api key: ')
 
+BASEURL = 'https://api.rawg.io/api/{}'
+APINAMES = """creator-roles
+creators
+developers
+games
+genres
+platforms
+publishers
+stores
+tags""".splitlines()
+#init
 #make sure we're in the right place to read the apikey file
 curpth = os.getcwd()
 assert os.path.basename(curpth) == 'rawgvideogames'
@@ -40,39 +52,112 @@ with open(r'apikey.dontsync.txt','r') as f:
 if len(lines) > 0:
     APIKEY = lines[:32]
 
-#get some sample results
-url = r"https://api.rawg.io/api/platforms?key={}".format(APIKEY)#&page_size=100
+
+def getfromrawg(apiname, params):
+    """
+    Build a RAWG api url from provided information and API key
+
+    Parameters
+    ----------
+    apiname : string
+        the name of the API to call .
+    params : string 
+        GET paramaters that can be passed as part of the url.
+
+    Returns
+    -------
+    dataframe.
+
+    """
+    url = BASEURL+apiname+'?key='+APIKEY+'&'+params
+    url = url.rstrip('&')#strip of any extra ampersands
+    res = requests.get(url)
+    
+    # if the request wasn't successful - something went wrong
+    if res.status_code != 200:
+        assert False
+    
+    rc = res.content # this should be a json resopnse
+    d = json.loads(rc)
+    len(d)
+    list(d.keys())
+    # ['count', 'next', 'previous', 'results']
+    len(d['results']) # for some reason this doesn't always agree with d['count']
+    
+    #print high level info about the json
+    print(f"count of results: {d['count']}")
+    #print(f"link to previous: {d['previous']}")
+    #print(f"link to next: {d['next']}")
+    
+    assert d['count'] == 51 #count is the total number of all results - not current page
+    
+    
+    # get the results into a datframe so we can begin to explore
+    resdf = pd.DataFrame(d['results'])
+    #resdf.info()
+    return (d['previous'], d['next'], d['count'], resdf)
+
+def getplatresult(url):
+    """ get a typical result set for the platforms API
+    
+    """
+    res = requests.get(url)
+    
+    # if the request wasn't successful - something went wrong
+    if res.status_code != 200:
+        assert False
+    
+    rc = res.content # this should be a json resopnse
+    d = json.loads(rc)
+    len(d)
+    list(d.keys())
+    # ['count', 'next', 'previous', 'results']
+    len(d['results']) # for some reason this doesn't always agree with d['count']
+    
+    #print high level info about the json
+    print(f"count of results: {d['count']}")
+    #print(f"link to previous: {d['previous']}")
+    #print(f"link to next: {d['next']}")
+    
+    assert d['count'] == 51 #count is the total number of all results - not current page
+    
+    
+    # get the results into a datframe so we can begin to explore
+    resdf = pd.DataFrame(d['results'])
+    #resdf.info()
+    return (d['previous'], d['next'], d['count'], resdf)
+
+#(prv, nxt, cnt, df) = (d['previous'], d['next'], d['count'], resdf)
+
+def getallplatforms():
+    """
+    Returns
+    -------
+    alldf : dataframe
+        contains all the results for the platforms that were fetched 1 page at a time.
+
+    """
+    url = r"https://api.rawg.io/api/platforms?key={}".format(APIKEY)#&page_size=100
+    #loop through all platform results
+    cur = url
+    alldf = pd.DataFrame()
+    while True:
+        (prv, nxt, cnt, df) = (None, None, None, None)
+        (prv, nxt, cnt, df) = getplatresult(cur)
+        alldf = alldf.append(df)
+        if nxt != None:
+            cur = nxt
+        else:
+            print('done getting all results')
+            break
+    
+    if nxt == None:
+        print('num')
+    
+    alldf.info()
+    return alldf
 
 
-res = requests.get(url)
-
-# if the request wasn't successful - something went wrong
-if res.status_code != 200:
-    assert False
-
-rc = res.content # this should be a json resopnse
-d = json.loads(rc)
-len(d)
-list(d.keys())
-# ['count', 'next', 'previous', 'results']
-len(d['results']) # for some reason this doesn't always agree with d['count']
-
-#print high level info about the json
-print(f"count of results: {d['count']}")
-print(f"link to previous: {d['previous']}")
-print(f"link to next: {d['next']}")
-
-assert d['count'] == 51 #are there always 51 results per page by default?
 
 
-# get the results into a datframe so we can begin to explore
-resdf = pd.DataFrame(d['results'])
-resdf.info()
 
-# summarize numeric columns
-resdf.groupby('name').describe()
-
-resdf['name'].value_counts()
-
-# summarize non-numeric cols
-resdf.describe(include=[object])
