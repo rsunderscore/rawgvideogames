@@ -12,7 +12,7 @@ Free for personal use as long as you attribute RAWG as the source of the data an
 results are paginated - keep following the next pointer to get everything
 ? is there a paramter that could be used to obtain larger page size
 ++ check: https://api.rawg.io/docs/
-ANSWER = yes, page_size=# to determine page size
+ANSWER = yes, page_size=# to determine page size (for some apis -fails for platforms)
 to get a specific page send page=
 ? what is the unit for page_size
 """
@@ -31,7 +31,7 @@ pd.set_option('display.max_columns',20)#don't show ellipses
 #read rawg api key from input or get from file 
 #APIKEY = input('api key: ')
 
-BASEURL = 'https://api.rawg.io/api/{}'
+BASEURL = 'https://api.rawg.io/api/'
 APINAMES = """creator-roles
 creators
 developers
@@ -53,6 +53,8 @@ if len(lines) > 0:
     APIKEY = lines[:32]
 
 
+
+#deprecated
 def getfromrawg(apiname, params):
     """
     Build a RAWG api url from provided information and API key
@@ -66,7 +68,7 @@ def getfromrawg(apiname, params):
 
     Returns
     -------
-    dataframe.
+    prevlink, nextlink, dataframe.
 
     """
     url = BASEURL+apiname+'?key='+APIKEY+'&'+params
@@ -109,10 +111,10 @@ def getplatresult(url):
     
     rc = res.content # this should be a json resopnse
     d = json.loads(rc)
-    len(d)
-    list(d.keys())
+    #len(d)
+    #list(d.keys())
     # ['count', 'next', 'previous', 'results']
-    len(d['results']) # for some reason this doesn't always agree with d['count']
+    #len(d['results']) # for some reason this doesn't always agree with d['count']
     
     #print high level info about the json
     print(f"count of results: {d['count']}")
@@ -128,6 +130,55 @@ def getplatresult(url):
     return (d['previous'], d['next'], d['count'], resdf)
 
 #(prv, nxt, cnt, df) = (d['previous'], d['next'], d['count'], resdf)
+def getfromrawg2(apiname, params, pgs=10):
+    url = BASEURL+apiname+'?key='+APIKEY
+    return getrawgurlpgs(url, params,pgs=pgs)
+
+def getrawgurl(url, params=None):
+#result of api call is always json which we can translate to dict
+    params = '' if not params else params
+    res = requests.get("&".join([url, params]).rstrip('&'))
+    if res.status_code != 200: #need retry logic
+        assert False
+    rc = res.content # this should be a json resopnse
+    d = json.loads(rc)
+    if 'results' in d.keys():
+        #dict may or may not have a 'results' key which can be parsed to dataframe
+        resdf = pd.DataFrame(d['results'])
+        return (d['previous'], d['next'], d['count'], resdf)
+    else:
+        #if no results key then then use top level dict as dataframe result
+        resdf = pd.Series(d).to_frame().T
+        return (None, None, 1, resdf)
+    
+def test_getfromrawg2_game_detail():
+    (pgs, cnt, df) = getfromrawg2('games/31859','')
+
+def getgamedetails():
+    url = r"https://api.rawg.io/api/games/31859?key={}".format(APIKEY) 
+    res = requests.get(url)
+    res.status_code
+    rc = res.content
+    d = json.loads(rc)
+    
+def getrawgurlpgs(url,params, pgs=10):
+    nxt = url
+    alldf = pd.DataFrame()
+    pgct=0
+    while nxt is not None:
+        (prev, nxt, cnt, df) = getrawgurl(nxt, params)
+        pgct+=1
+        alldf = alldf.append(df)
+        if pgct > pgs: break
+    return (pgct, cnt, alldf)
+        
+
+def test_getrawgurl():
+    url = r"https://api.rawg.io/api/platforms?key={}".format(APIKEY)#&page_size=100
+    (prev,nxt,cnt,df) = getrawgurl(url, '')
+    assert prev is None
+    print(f"prev is {prev} (should be None), cnt is {cnt}, df len is {len(df)}")
+    print(df.info())
 
 def getallplatforms():
     """
@@ -156,6 +207,8 @@ def getallplatforms():
     
     alldf.info()
     return alldf
+
+
 
 
 
