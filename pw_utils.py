@@ -35,6 +35,14 @@ def decryptpw(key, epw):
     return pw
 
 
+def test_pw_with_pw():
+    pw = 'powerlevel1000'
+    msg = 'this is a secret message that cant be very long'
+    emsg = encrypt_using_password(pw, msg)
+    
+    msg2 = decrypt_using_password(pw, emsg)
+    assert msg == msg2
+
 def encrypt_using_password(pw, msg):
     envsalt = os.getenv('salt16')
     salt = int.to_bytes(int(envsalt), 16, 'little') if envsalt else os.urandom(16)
